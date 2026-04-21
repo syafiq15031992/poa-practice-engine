@@ -108,7 +108,7 @@ if page == "🚀 Practice Engine":
     st.markdown("""
         <div style="text-align: center; padding-bottom: 20px;">
             <h1 style='color: #2c3e50; font-size: 3rem; margin-bottom: 0;'>PoA Practice Engine</h1>
-            <p style='color: #576574; font-size: 1.2rem; opacity: 0.8;'>Refining Double-Entry Precision (Syllabus 7088/7086)</p>
+            <p style='color: #576574; font-size: 1.2rem; opacity: 0.8;'>Refining Double-Entry Precision (Syllabus K342/K233)</p>
             <div style="height: 5px; width: 100px; background-color: #2e86de; margin: 20px auto; border-radius: 10px;"></div>
         </div>
     """, unsafe_allow_html=True)
