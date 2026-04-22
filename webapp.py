@@ -13,6 +13,9 @@ if 'generator' not in st.session_state:
     st.session_state.score = 0
     st.session_state.analysis = []
     st.session_state.concept = ""
+    # ADD THESE TWO LINES HERE:
+    st.session_state.selected_level = "Medium"
+    st.session_state.selected_topic = "All"
 
 # --- 2. PAGE SETUP ---
 st.set_page_config(page_title="PoA Mastery Engine", layout="wide")
@@ -60,19 +63,18 @@ st.markdown("""
 
 # --- 3. CALLBACKS ---
 def handle_change():
-    """Generates a new question whenever the user changes difficulty or topic."""
-    # This prevents the app from crashing if the keys haven't been created yet
-    if 'selected_topic' in st.session_state and 'selected_level' in st.session_state:
-        res = st.session_state.generator.get_vault(
-            st.session_state.selected_topic, 
-            st.session_state.selected_level
-        )
-        st.session_state.current_q = res[0]
-        st.session_state.dr_acc = res[1]
-        st.session_state.cr_acc = res[2]
-        st.session_state.topic = res[3]
-        st.session_state.analysis = res[4]
-        st.session_state.concept = res[5]
+    # Use .get() to avoid KeyError/NameError during initial boot
+    topic = st.session_state.get('selected_topic', 'All')
+    level = st.session_state.get('selected_level', 'Medium')
+    
+    res = st.session_state.generator.get_vault(topic, level)
+    
+    st.session_state.current_q = res[0]
+    st.session_state.dr_acc = res[1]
+    st.session_state.cr_acc = res[2]
+    st.session_state.topic = res[3]
+    st.session_state.analysis = res[4]
+    st.session_state.concept = res[5]
 
 # --- 4. SIDEBAR ---
 with st.sidebar:
