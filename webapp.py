@@ -5,7 +5,7 @@ from app import PoAGenerator
 # --- 1. INITIALIZATION ---
 if 'generator' not in st.session_state:
     st.session_state.generator = PoAGenerator()
-    st.session_state.current_q = "Ready to start? Click the button below."
+    st.session_state.current_q = "Ready to start? Click the ✨ Generate New Challenge button above."
     st.session_state.dr_acc = []
     st.session_state.cr_acc = []
     st.session_state.topic = "General"
