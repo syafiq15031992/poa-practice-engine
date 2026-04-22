@@ -1,180 +1,124 @@
 import streamlit as st
-import time
-from app import PoAGenerator
+import random
 
-# --- 1. INITIALIZATION ---
-# Initialize the generator and session state once
-if 'generator' not in st.session_state:
-    st.session_state.generator = PoAGenerator()
-    st.session_state.current_q = "Ready to start? Click the button below."
-    st.session_state.dr_acc = []
-    st.session_state.cr_acc = []
-    st.session_state.topic = "General"
-    st.session_state.score = 0
-    st.session_state.analysis = []
-    st.session_state.concept = ""
+# --- 1. THE ENGINE (Logic) ---
+class PoAGenerator:
+    def __init__(self):
+        # --- RANDOMIZED SEED LISTS ---
+        self.trade_entities = [
+            "Ames Ltd", "Ben & Co", "Chandra Pte Ltd", "Dinesh Trading", 
+            "Elijah's Logistics", "Farah Furnishings", "Guan Hoe & Sons", 
+            "Hock Seng Apparel", "Ibrahim & Partners", "J-Tech Solutions",
+            "Kailash Emporium", "Lina's Boutique", "Maju Jaya Enterprise",
+            "Ngee Ann Trading", "Oceanic Seafood", "Pioneer Hardware"
+        ] 
+        self.other_entities = [
+            "Randy", "Mr Tan", "Ms Lee", "Mrs Gopal", "Alice Wong", 
+            "David Lim", "Fatimah", "Ryan", "Hafiz", "Zhi Hao"
+        ]
+        self.non_current_assets = [
+            "Motor Vehicles", "Office Equipment", "Computers", "Machinery", 
+            "Delivery Vans", "Display Cabinets", "Air-Conditioning Units", 
+            "Store Fixtures", "Photocopying Machines", "Cash Registers"
+        ]
+        self.expenses = [
+            "Rent Expense", "Insurance", "Electricity", "Water & Utilities", 
+            "Advertising", "Wages & Salaries", "Telephone Charges", 
+            "Printing & Stationery", "General Expenses", "Postage Fees"
+        ]
 
-# --- 2. PAGE SETUP ---
-st.set_page_config(page_title="PoA Mastery Engine", layout="wide")
+        # 2. THE COMPREHENSIVE VAULT (Stored as self.vault)
+        self.vault = [
+            # --- EASY: FOUNDATION (AO1) ---
+            {"topic": "Inventory", "level": "Easy", "q": "Purchased goods for ${amt} on credit from {t_ent}", "dr": [("Inventory", "amt")], "cr": [(f"Trade Payables - {{t_ent}}", "amt")], "analysis": [{"acc": "Inventory", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Trade Payables", "elem": "Liability", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Accrual Basis: Transactions are recorded when they occur."},
+            {"topic": "Inventory", "level": "Easy", "q": "Returned goods worth ${small_amt} to {t_ent} due to defects", "dr": [(f"Trade Payables - {{t_ent}}", "small_amt")], "cr": [("Purchase Returns", "small_amt")], "analysis": [{"acc": "Trade Payables", "elem": "Liability", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "Purchase Returns", "elem": "Contra-Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Returns reduce the liability owed to the supplier."},
+            {"topic": "Revenue", "level": "Easy", "q": "Sold goods on credit to {t_ent} for ${amt}", "dr": [(f"Trade Receivables - {{t_ent}}", "amt")], "cr": [("Sales Revenue", "amt")], "analysis": [{"acc": "Trade Receivables", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Sales Revenue", "elem": "Revenue", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Revenue increases Equity via the Credit side."},
+            {"topic": "Revenue", "level": "Easy", "q": "{t_ent} returned goods worth ${small_amt} from a previous sale", "dr": [("Sales Returns", "small_amt")], "cr": [(f"Trade Receivables - {{t_ent}}", "small_amt")], "analysis": [{"acc": "Sales Returns", "elem": "Contra-Revenue", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "Trade Receivables", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Sales Returns reduce total Revenue and amount owed."},
+            {"topic": "Drawings", "level": "Easy", "q": "Owner took goods worth ${small_amt} for personal use", "dr": [("Drawings", "small_amt")], "cr": [("Inventory", "small_amt")], "analysis": [{"acc": "Drawings", "elem": "Equity", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "Inventory", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Business Entity: Owner's personal use is recorded as Drawings."},
+            {"topic": "Inventory", "level": "Easy", "q": "Purchased goods for ${amt}. Paid ${small_amt} by cheque and balance on credit from {t_ent}", "dr": [("Inventory", "amt")], "cr": [("Cash at Bank", "small_amt"), (f"Trade Payables - {{t_ent}}", "amt - small_amt")], "analysis": [{"acc": "Inventory", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Bank", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}, {"acc": "Trade Payables", "elem": "Liability", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Compound Entry: Multiple credit accounts updated for one purchase."},
+            {"topic": "CapEx/RevEx", "level": "Easy", "q": "Paid ${small_amt} for the annual maintenance of {ast_lower}", "dr": [("Repair & Maintenance", "small_amt")], "cr": [("Cash at Bank", "small_amt")], "analysis": [{"acc": "Repairs", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Bank", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Revenue Expenditure: Maintenance costs are recorded as expenses."},
+            {"topic": "Capital", "level": "Easy", "q": "Owner {o_ent} contributed a personal vehicle worth ${amt} into the business", "dr": [("Motor Vehicles", "amt")], "cr": [("Capital", "amt")], "analysis": [{"acc": "Vehicles", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Capital", "elem": "Equity", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Business Entity: Personal assets introduced become business equity."},
+            {"topic": "Concepts", "level": "Easy", "q": "Owner {o_ent} took ${small_amt} to pay for personal groceries", "dr": [("Drawings", "small_amt")], "cr": [("Cash", "small_amt")], "analysis": [{"acc": "Drawings", "elem": "Equity", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "Cash", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Entity Concept: Business and owner are separate."},
+            {"topic": "Concepts", "level": "Easy", "q": "Purchased a calculator for $15. Recorded as an expense due to small value", "dr": [("Office Stationery", 15)], "cr": [("Cash at Bank", 15)], "analysis": [{"acc": "Stationery", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Bank", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Materiality: Low-value items are expensed for simplicity."},
+            {"topic": "Concepts", "level": "Easy", "q": "Inventory bought for ${amt} stays at ${amt} despite market value rising", "dr": [("No Entry Required", 0)], "cr": [("No Entry Required", 0)], "analysis": [{"acc": "Inventory", "elem": "Concept", "eff": "No Change", "rule": "None"}], "concept": "Historical Cost: Recording assets at original purchase price."},
+            {"topic": "Other Income", "level": "Easy", "q": "Received a cheque for ${small_amt} as commission earned", "dr": [("Cash at Bank", "small_amt")], "cr": [("Commission Income", "small_amt")], "analysis": [{"acc": "Bank", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Commission", "elem": "Income", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Income: Non-operating revenue increases Equity via Credit."},
+            {"topic": "Other Income", "level": "Easy", "q": "Received ${amt} by cheque for renting out premises", "dr": [("Cash at Bank", "amt")], "cr": [("Rent Income", "amt")], "analysis": [{"acc": "Bank", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Rent Income", "elem": "Income", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Income: Rental revenue increases profit."},
+            {"topic": "Other Income", "level": "Easy", "q": "Received a discount of ${small_amt} from supplier {t_ent}", "dr": [(f"Trade Payables - {{t_ent}}", "small_amt")], "cr": [("Discount Received", "small_amt")], "analysis": [{"acc": "Trade Payables", "elem": "Liability", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "Discount Rec.", "elem": "Income", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Discount: Gain from early payment reduces amount owed."},
+            {"topic": "Liabilities", "level": "Easy", "q": "Obtained a 5-year bank loan of {amt_x_5} to buy new equipment", "dr": [("Cash at Bank", "amt_x_5")], "cr": [("Bank Loan", "amt_x_5")], "analysis": [{"acc": "Bank", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Loan", "elem": "Liability", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Liability: Borrowing creates an obligation to repay."},
+            {"topic": "Inventory", "level": "Easy", "q": "Purchased goods worth ${amt} on credit, subject to 10% trade discount", "dr": [("Inventory", "int(amt * 0.9)")], "cr": [(f"Trade Payables - {{t_ent}}", "int(amt * 0.9)")], "analysis": [{"acc": "Inventory", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Trade Payables", "elem": "Liability", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Trade Discount: Recorded at net price."},
+            {"topic": "Incomplete Records", "level": "Easy", "q": "Closing Capital ${amt_plus_2000}. Drawings ${small_amt}. Opening Capital ${amt}. Record profit.", "dr": [("P&L Summary", "2000 + small_amt")], "cr": [("Capital", "2000 + small_amt")], "analysis": [{"acc": "Profit", "elem": "Equity", "eff": "Increase (+)", "rule": "Credit"}, {"acc": "Capital", "elem": "Equity", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Capital Equation: Profit increases Equity."},
 
-st.markdown("""
-    <style>
-    .stApp {
-        background: var(--background-color);
-        background-image: radial-gradient(circle at 2px 2px, rgba(128,128,128,0.15) 1px, transparent 0);
-        background-size: 40px 40px;
-    }
-    .journal-table { 
-        width: 100%; 
-        border-collapse: collapse; 
-        background: var(--secondary-background-color); 
-        border: 2px solid var(--text-color); 
-        border-radius: 10px;
-        overflow: hidden;
-    }
-    .journal-table th { background-color: #2d3436; color: #ffffff; padding: 15px; }
-    .journal-table td { 
-        padding: 15px; 
-        border-bottom: 1px solid rgba(128,128,128,0.2); 
-        font-size: 18px; 
-        color: var(--text-color); 
-    }
-    .dr-col { color: #2ecc71; text-align: right; width: 120px; font-family: 'Courier New', monospace; font-weight: bold; font-size: 22px; }
-    .cr-col { color: #e74c3c; text-align: right; width: 120px; font-family: 'Courier New', monospace; font-weight: bold; font-size: 22px; }
-    .indent-cr { padding-left: 50px !important; }
-    .question-box { 
-        background-color: var(--secondary-background-color); 
-        padding: 30px !important; 
-        border-radius: 15px; 
-        box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
-        border-left: 8px solid #2e86de; 
-        margin-top: 20px; 
-        margin-bottom: 20px;
-        color: var(--text-color);
-    }
-    .scenario-label { color: #8395a7; font-size: 13px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-    .big-font { font-size: 26px !important; font-weight: 600 !important; line-height: 1.4; }
-    .rule-debit { color: #54a0ff; font-weight: bold; }
-    </style>
-    """, unsafe_allow_html=True)
+            # --- MEDIUM: APPLICATION (AO2) ---
+            {"topic": "NCA", "level": "Medium", "q": "Paid ${amt} for a new {ast_lower} and ${small_amt} for delivery charges", "dr": [("{ast}", "amt + small_amt")], "cr": [("Cash at Bank", "amt + small_amt")], "analysis": [{"acc": "{ast}", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Bank", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Capital Expenditure: Delivery costs are included in the asset cost."},
+            {"topic": "Depreciation", "level": "Medium", "q": "Annual depreciation for {ast_lower} is charged at 10% on cost of {amt_x_10}", "dr": [(f"Depreciation - {{ast}}", "amt")], "cr": [(f"Accumulated Depreciation - {{ast}}", "amt")], "analysis": [{"acc": "Depreciation", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Acc. Deprec.", "elem": "Contra-Asset", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Matching Principle: Allocating asset cost over useful life."},
+            {"topic": "Accruals", "level": "Medium", "q": "At 31 Dec, {exp_lower} of ${small_amt} was still unpaid", "dr": [("{exp}", "small_amt")], "cr": [(f"Accrued {{exp}}", "small_amt")], "analysis": [{"acc": "{exp}", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Accrued Exp", "elem": "Liability", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Accrual Basis: Recording expenses when incurred."},
+            {"topic": "Prepayments", "level": "Medium", "q": "Paid ${amt} for {exp_lower}, which includes ${small_amt} for the next year", "dr": [(f"Prepaid {{exp}}", "small_amt"), ("{exp}", "amt - small_amt")], "cr": [("Cash at Bank", "amt")], "analysis": [{"acc": "Prepaid Exp", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "{exp}", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Bank", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Matching: Portion used is an expense; the rest is an asset."},
+            {"topic": "Impairment", "level": "Medium", "q": "A debt of ${small_amt} from {t_ent} is written off as irrecoverable", "dr": [("Impairment Loss", "small_amt")], "cr": [(f"Trade Receivables - {{t_ent}}", "small_amt")], "analysis": [{"acc": "Impairment", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Trade Rec.", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Prudence: Writing off bad debts to avoid overstating assets."},
+            {"topic": "Impairment", "level": "Medium", "q": "Allowance for Impairment is adjusted to ${small_amt} (previously ${small_amt_plus_100})", "dr": [("Allowance for Impairment", 100)], "cr": [("Reduction in Allowance", 100)], "analysis": [{"acc": "Allowance", "elem": "Contra-Asset", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "Reduction Income", "elem": "Other Income", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Adjustment: A decrease in allowance is treated as other income."},
+            {"topic": "Loans", "level": "Medium", "q": "Paid monthly installment: ${amt} principal and ${small_amt} interest", "dr": [("Bank Loan", "amt"), ("Interest Expense", "small_amt")], "cr": [("Cash at Bank", "amt + small_amt")], "analysis": [{"acc": "Bank Loan", "elem": "Liability", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "Interest Expense", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Bank", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Loan: Reducing principal and recording interest expense."},
+            {"topic": "Bank Recon", "level": "Medium", "q": "Bank statement shows a credit transfer of ${amt} from {t_ent} not in books", "dr": [("Cash at Bank", "amt")], "cr": [(f"Trade Receivables - {{t_ent}}", "amt")], "analysis": [{"acc": "Bank", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Trade Rec.", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Bank Recon: Updating for receipts recorded by the bank first."},
+            {"topic": "Bank Recon", "level": "Medium", "q": "A cheque of ${small_amt} received from {t_ent} was returned as dishonoured", "dr": [(f"Trade Receivables - {{t_ent}}", "small_amt")], "cr": [("Cash at Bank", "small_amt")], "analysis": [{"acc": "Trade Rec.", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Bank", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Dishonoured Cheque: Reversing receipt because payment failed."},
+            {"topic": "Concepts", "level": "Medium", "q": "At year-end, a provision for legal claims of ${amt} is created", "dr": [("Legal Expenses", "amt")], "cr": [("Provision for Claims", "amt")], "analysis": [{"acc": "Expenses", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Provision", "elem": "Liability", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Prudence: Recording potential losses immediately."},
+            {"topic": "Liabilities", "level": "Medium", "q": "Interest of ${small_amt} on loan incurred but not yet paid", "dr": [("Interest Expense", "small_amt")], "cr": [("Accrued Interest", "small_amt")], "analysis": [{"acc": "Interest Exp", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Accrued Int", "elem": "Liability", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Matching: Interest is an expense of the period incurred."},
+            {"topic": "Inventory", "level": "Medium", "q": "Inventory found damaged. Cost ${amt}, but NRV is only ${amt_minus_small_amt}.", "dr": [("Inventory Loss", "small_amt")], "cr": [("Inventory", "small_amt")], "analysis": [{"acc": "Inv Loss", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Inventory", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Prudence: Valuing inventory at lower of Cost and NRV."},
+            {"topic": "Control Accounts", "level": "Medium", "q": "Total credit sales from Sales Journal was ${amt}.", "dr": [("Trade Receivables Control", "amt")], "cr": [("Sales Revenue", "amt")], "analysis": [{"acc": "TR Control", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Sales Revenue", "elem": "Revenue", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Control Account: Summarizing total sales from journal into ledger."},
+            {"topic": "Inventory", "level": "Medium", "q": "Goods sold at 25% markup. Sales Revenue ${amt}. Record Cost of Sales.", "dr": [("Cost of Sales", "int(amt / 1.25)")], "cr": [("Inventory", "int(amt / 1.25)")], "analysis": [{"acc": "Cost of Sales", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Inventory", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Markup: Calculating Cost of Sales from Sales Revenue."},
 
-# --- 3. CALLBACKS ---
-def handle_change():
-    """Generates a new question whenever the user changes difficulty or topic."""
-    # This prevents the app from crashing if the keys haven't been created yet
-    if 'selected_topic' in st.session_state and 'selected_level' in st.session_state:
-        res = st.session_state.generator.get_vault(
-            st.session_state.selected_topic, 
-            st.session_state.selected_level
-        )
-        st.session_state.current_q = res[0]
-        st.session_state.dr_acc = res[1]
-        st.session_state.cr_acc = res[2]
-        st.session_state.topic = res[3]
-        st.session_state.analysis = res[4]
-        st.session_state.concept = res[5]
+            # --- HARD: MASTERY (AO3) ---
+            {"topic": "Disposal", "level": "Hard", "q": "An old {ast_lower} (Cost: {amt_x_2}, Acc. Dep: ${amt}) was sold for ${amt} cash", "dr": [("Cash at Bank", "amt"), (f"Accumulated Depreciation - {{ast}}", "amt")], "cr": [(f"Disposal of {{ast}}", "amt * 2")], "analysis": [{"acc": "Bank", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Accum. Deprec.", "elem": "Contra-Asset", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "Disposal", "elem": "Asset (Temp)", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Disposal: Removing original cost and accumulated depreciation."},
+            {"topic": "Limited Co", "level": "Hard", "q": "The company issued 50,000 ordinary shares for ${amt} cash", "dr": [("Cash at Bank", "amt")], "cr": [("Share Capital", "amt")], "analysis": [{"acc": "Bank", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Share Cap", "elem": "Equity", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Equity: Issuing shares provides cash and increases share capital."},
+            {"topic": "Errors", "level": "Hard", "q": "A sale of ${amt} to {t_ent} was recorded in {o_ent}'s account by mistake", "dr": [(f"Trade Receivables - {{t_ent}}", "amt")], "cr": [(f"Trade Receivables - {{o_ent}}", "amt")], "analysis": [{"acc": "TR - correct", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "TR - wrong", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Error of Commission: Correcting the specific subsidiary account."},
+            {"topic": "Errors", "level": "Hard", "q": "The purchase of {ast_lower} for ${amt} was omitted from the books", "dr": [("{ast}", "amt")], "cr": [("Other Payables", "amt")], "analysis": [{"acc": "{ast}", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Other Payables", "elem": "Liability", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Error of Omission: Recording a forgotten transaction."},
+            {"topic": "Disposal", "level": "Hard", "q": "Scrapped an old {ast_lower} (Cost: ${amt}) fully depreciated. No cash.", "dr": [(f"Accumulated Depreciation - {{ast}}", "amt")], "cr": [("{ast}", "amt")], "analysis": [{"acc": "Acc. Deprec.", "elem": "Contra-Asset", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "NCA Cost", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Disposal: Scrapping clears cost and full depreciation."},
+            {"topic": "Disposal", "level": "Hard", "q": "Traded in an old {ast_lower} (Cost: ${amt}, Acc. Dep: ${small_amt}) for new costing {amt_x_3}", "dr": [(f"{{ast}} (New)", "amt * 3"), (f"Accumulated Depreciation - {{ast}}", "small_amt")], "cr": [(f"{{ast}} (Old)", "amt"), ("Cash at Bank", "amt * 3 - (amt - small_amt)")], "analysis": [{"acc": f"{{ast}} (New)", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Acc. Deprec.", "elem": "Contra-Asset", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": f"{{ast}} (Old)", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}, {"acc": "Bank", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Trade-in: Using old asset value to offset new asset cost."},
+            {"topic": "Control Accounts", "level": "Hard", "q": "A contra entry of ${small_amt} was made between Ledgers.", "dr": [("Trade Payables Control", "small_amt")], "cr": [("Trade Receivables Control", "small_amt")], "analysis": [{"acc": "TP Control", "elem": "Liability", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "TR Control", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Contra: Offsetting receivables and payables for same entity."},
+            {"topic": "Limited Co", "level": "Hard", "q": "Directors declared a final ordinary dividend of $50,000.", "dr": [("Retained Earnings", 50000)], "cr": [("Dividends Payable", 50000)], "analysis": [{"acc": "Retained Earn.", "elem": "Equity", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "Dividends Pay", "elem": "Liability", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Dividends: Profit distribution reduces Equity and creates liability."},
+            {"topic": "Limited Co", "level": "Hard", "q": "Transfer of ${amt} from year's profit to General Reserve.", "dr": [("Retained Earnings", "amt")], "cr": [("General Reserve", "amt")], "analysis": [{"acc": "Retained Earn.", "elem": "Equity", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "General Reserve", "elem": "Equity", "eff": "Increase (+)", "rule": "Credit"}], "concept": "Reserves: Moving profits within Equity."},
+            {"topic": "Suspense", "level": "Hard", "q": "Repairs of ${small_amt} entered in Cash Book but omitted from Repairs account.", "dr": [("Repairs Expense", "small_amt")], "cr": [("Suspense Account", "small_amt")], "analysis": [{"acc": "Repairs", "elem": "Expense", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Suspense", "elem": "Temporary", "eff": "N/A", "rule": "Credit"}], "concept": "Suspense: Temporary account for one-sided errors."},
+            {"topic": "Suspense", "level": "Hard", "q": "Total of Sales Journal was overcast by ${amt}.", "dr": [("Sales Revenue", "amt")], "cr": [("Suspense Account", "amt")], "analysis": [{"acc": "Sales Revenue", "elem": "Revenue", "eff": "Decrease (-)", "rule": "Debit"}, {"acc": "Suspense", "elem": "Temporary", "eff": "N/A", "rule": "Credit"}], "concept": "Error Correction: Reducing overstated revenue using suspense."},
+            {"topic": "Business Purchase", "level": "Hard", "q": "Purchased business: Assets {amt_x_10}, Liabs {amt_x_2}. Paid {amt_x_9} cheque.", "dr": [("Assets", "amt * 10"), ("Goodwill", "amt")], "cr": [("Liabilities", "amt * 2"), ("Cash at Bank", "amt * 9")], "analysis": [{"acc": "Assets", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Goodwill", "elem": "Asset", "eff": "Increase (+)", "rule": "Debit"}, {"acc": "Liabilities", "elem": "Liability", "eff": "Increase (+)", "rule": "Credit"}, {"acc": "Bank", "elem": "Asset", "eff": "Decrease (-)", "rule": "Credit"}], "concept": "Goodwill: Intangible asset for extra paid for reputation."}
+        ]
 
-# --- 4. SIDEBAR ---
-with st.sidebar:
-    st.markdown("<h2 style='text-align: center;'>⚙️ Control Panel</h2>", unsafe_allow_html=True)
-    
-    page = st.radio("Navigation", ["🚀 Practice Engine", "📖 Syllabus Reference", "📧 Contact"], key="page")
-    
-    st.divider()
+    def get_vault(self, category="All", selected_level="Medium"):
+        t_ent = random.choice(self.trade_entities)
+        o_ent = random.choice(self.other_entities)
+        ast = random.choice(self.non_current_assets)
+        ast_lower = ast.lower()
+        exp = random.choice(self.expenses)
+        exp_lower = exp.lower()
+        amt = random.randrange(1000, 5000, 100)
+        small_amt = random.randrange(50, 400, 10)
 
-    st.select_slider(
-        "Select Difficulty (AO Level):",
-        options=["Easy", "Medium", "Hard"],
-        value="Medium",
-        key="selected_level",
-        on_change=handle_change,
-        help="Easy: AO1 Knowledge | Medium: AO2 Application | Hard: AO3 Analysis"
-    )
+        ctx = {
+            "amt": amt, "small_amt": small_amt, "amt_x_2": amt * 2, "amt_x_3": amt * 3, 
+            "amt_x_5": amt * 5, "amt_x_9": amt * 9, "amt_x_10": amt * 10, 
+            "amt_plus_2000": amt + 2000, "amt_minus_small_amt": amt - small_amt, 
+            "small_amt_plus_100": small_amt + 100, "int": int
+        }
 
-    topic_list = ["All", "Inventory", "Revenue", "NCA", "Depreciation", "Disposal", "Accruals", "Prepayments", "Impairment", "Capital", "Loans", "Limited Co", "Bank Recon", "Errors", "Suspense", "Concepts"]
-    
-    st.selectbox(
-        "Select Syllabus Topic:", 
-        topic_list,
-        key="selected_topic",
-        on_change=handle_change
-    )
-    
-    st.metric(label="Questions Solved", value=st.session_state.score)
-    st.progress(min(st.session_state.score * 10, 100))
-    st.info("**Syafiq**\n\nNIE Student Teacher (PGDE)")
+        pool = [q for q in self.vault if q.get('level') == selected_level]
+        if category != "All":
+            cat_pool = [q for q in pool if q['topic'] == category]
+            if cat_pool: pool = cat_pool
+        
+        if not pool: pool = self.vault
+        res = random.choice(pool)
 
-# --- 5. MAIN CONTENT ---
-if page == "🚀 Practice Engine":
-    st.markdown("""
-        <div style="text-align: center; padding-bottom: 20px;">
-            <h1 style='color: #2c3e50; font-size: 3rem; margin-bottom: 0;'>PoA Practice Engine</h1>
-            <p style='color: #576574; font-size: 1.2rem; opacity: 0.8;'>Refining Double-Entry Precision</p>
-        </div>
-    """, unsafe_allow_html=True)
+        def clean_text(text):
+            if not isinstance(text, str): return text
+            return text.format(t_ent=t_ent, o_ent=o_ent, ast=ast, ast_lower=ast_lower, exp=exp, exp_lower=exp_lower, **ctx)
 
-    # FIXED: Using st.session_state instead of local variables
-    if st.button("✨ Generate New Challenge", use_container_width=True):
-        st.session_state.score += 1
-        handle_change() # Use the callback logic to keep it consistent
+        q_final = clean_text(res['q'])
+        dr_final = [(clean_text(name), eval(str(val), {"__builtins__": {}}, ctx)) for name, val in res['dr']]
+        cr_final = [(clean_text(name), eval(str(val), {"__builtins__": {}}, ctx)) for name, val in res['cr']]
+        
+        analysis_final = []
+        for item in res.get('analysis', []):
+            analysis_final.append({
+                "acc": clean_text(item['acc']),
+                "elem": item['elem'],
+                "eff": item['eff'],
+                "rule": item['rule']
+            })
 
-    # Display Question
-    st.markdown(f"""
-        <div class="question-box">
-            <p class="scenario-label">Accounting Scenario ({st.session_state.topic})</p>
-            <p class="big-font">{st.session_state.current_q}</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # REVEAL SECTION
-    if st.session_state.dr_acc and st.session_state.current_q != "Ready to start? Click the button below.": 
-        with st.expander("🔍 Reveal General Journal Entry & Analysis", expanded=True):
-            st.subheader("📓 General Journal")
-            
-            dr_rows = "".join([f"<tr><td><strong>{n}</strong></td><td class='dr-col'>{v:,}</td><td></td></tr>" for n, v in st.session_state.dr_acc])
-            cr_rows = "".join([f"<tr><td class='indent-cr'><strong>{n}</strong></td><td></td><td class='cr-col'>{v:,}</td></tr>" for n, v in st.session_state.cr_acc])
-            
-            st.markdown(f"""
-            <table class="journal-table">
-                <thead>
-                    <tr><th>Particulars</th><th style="text-align: right;">Debit ($)</th><th style="text-align: right;">Credit ($)</th></tr>
-                </thead>
-                <tbody>
-                    {dr_rows}{cr_rows}
-                </tbody>
-            </table>
-            """, unsafe_allow_html=True)
-            
-            st.divider()
-
-            st.subheader("💡 Transaction Analysis")
-            h1, h2, h3, h4 = st.columns([2, 1, 1, 1])
-            h1.markdown("**Account**")
-            h2.markdown("**Element**")
-            h3.markdown("**Effect**")
-            h4.markdown("**Rule**")
-            st.divider()
-
-            if st.session_state.analysis:
-                for item in st.session_state.analysis:
-                    with st.container():
-                        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
-                        c1.markdown(f"**{item['acc']}**")
-                        c2.write(item['elem'])
-                        c3.write(item['eff'])
-                        c4.markdown(f"<span class='rule-debit'>{item['rule']}</span>", unsafe_allow_html=True)
-                        st.write("") 
-            
-            if st.session_state.concept:
-                st.info(f"**Key Concept:** {st.session_state.concept}")
-
-            st.balloons()
-
-elif page == "📖 Syllabus Reference":
-    st.title("Syllabus Guide")
-    st.info("Study Tip: Use the **DEAD LIC** acronym for Double-Entry Rules.")
-    # You could add a table here later for the AO1, AO2, AO3 definitions
-
-elif page == "📧 Contact":
-    st.title("Contact")
-    st.write("Reach out to Syafiq via the NIE portal.")
+        return (q_final, dr_final, cr_final, res['topic'], analysis_final, res['concept'])
