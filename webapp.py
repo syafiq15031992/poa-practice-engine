@@ -105,7 +105,6 @@ if st.session_state.page == "🚀 Practice Engine":
             
             if st.session_state.concept:
                 st.info(f"**Key Concept:** {st.session_state.concept}")
-            st.balloons()
 
 elif st.session_state.page == "📖 Syllabus Reference":
     st.title("Syllabus Guide")
