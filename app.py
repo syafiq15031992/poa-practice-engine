@@ -164,8 +164,8 @@ class PoAGenerator:
             return text.format(t_ent=t_ent, o_ent=o_ent, ast=ast, ast_lower=ast_lower, exp=exp, exp_lower=exp_lower, **ctx)
 
         q_final = clean_text(res['q'])
-        dr_final = [(clean_text(name), eval(str(val), {"__builtins__": {}}, ctx)) for name, val in res['dr']]
-        cr_final = [(clean_text(name), eval(str(val), {"__builtins__": {}}, ctx)) for name, val in res['cr']]
+        dr_final = [(clean_text(name), eval(str(val), {"__builtins__": {"int": int}}, ctx)) for name, val in res['dr']]
+        cr_final = [(clean_text(name), eval(str(val), {"__builtins__": {"int": int}}, ctx)) for name, val in res['cr']]
         
         analysis_final = []
         for item in res.get('analysis', []):
