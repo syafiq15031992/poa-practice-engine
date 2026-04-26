@@ -71,6 +71,28 @@ with st.sidebar:
     st.divider()
     st.info(f"**Ahmad Syafiq B Amiruddin**\n\nNIE Student Teacher (PGDE)")
 
+    # --- ADDITIONS BELOW ---
+    
+    st.divider()
+    st.markdown("### 🚀 Version Control")
+    col1, col2 = st.columns(2)
+    col1.metric("Version", "1.2.0")
+    col2.metric("Build", "APR-26")
+
+    st.divider()
+    st.markdown("### 📖 Reference")
+    st.markdown("**Principles of Accounts**")
+    st.caption("G2/G3 Upper Secondary")
+    st.caption("Marshall Cavendish Education")
+    
+    with st.expander("Syllabus Mapping (7088)"):
+        st.write("""
+        - **Units 1-3:** Ch. 1 to 5
+        - **Units 4-5:** Ch. 8 to 10
+        - **Unit 6:** Ch. 11 (NCA)
+        - **Unit 7:** Ch. 13 to 15
+        """)
+
 # --- 5. MAIN CONTENT ---
 
 if nav_choice == "Double Entry Practice":
